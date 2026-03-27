@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Impact Measurement Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f3f4f6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+        .card {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+        .message-box {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            z-index: 100;
+            transition: opacity 0.3s ease-in-out;
+            opacity: 0;
+            background-color: #d1fae5;
+            color: #065f46;
+            padding: 1rem 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .message-box.show {
+            opacity: 1;
+        }
+        .logic-model-container {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1rem;
+        }
+        .logic-model-section {
+            border: 1px solid #e5e7eb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease-in-out;
+            min-height: 200px;
+        }
+        .logic-model-section.disabled {
+            background-color: #f9fafb;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .logic-model-section.drag-over {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        .outcome-item, .impact-item {
+            list-style: none;
+            background-color: #f9fafb;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            position: relative;
+        }
+        .remove-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: none;
+            border: none;
+            color: #dc2626;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .outcome-item:hover .remove-btn, .impact-item:hover .remove-btn {
+            opacity: 1;
+        }
+        .export-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+        /* Drag and Drop Styles */
+        .examples-container {
+            background-color: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+        }
+        .examples-container.outcomes-impact {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .examples-container.outcomes-section {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .examples-container.impact-section {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .examples-container > div:not(h4) {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .example-item {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            margin: 0.25rem;
+            border-radius: 0.375rem;
+            cursor: grab;
+            user-select: none;
+            transition: all 0.2s ease-in-out;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .example-item[data-type="inputs"] {
+            background-color: #cfe2f3;
+            color: #1c4587;
+            border: 1px solid #6fa8dc;
+        }
+        .example-item[data-type="activities"] {
+            background-color: #f4cccc;
+            color: #990000;
+            border: 1px solid #e06666;
+        }
+        .example-item[data-type="outputs"] {
+            background-color: #fce5cd;
+            color: #b45f06;
+            border: 1px solid #f1c232;
+        }
+        .example-item[data-type="outcomes"] {
+            background-color: #d9ead3;
+            color: #2d5016;
+            border: 1px solid #93c47d;
+        }
+        .example-item[data-type="impact"] {
+            background-color: #d9d2e9;
+            color: #351c75;
+            border: 1px solid #9fc5e8;
+        }
+        .example-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .example-item:active {
+            cursor: grabbing;
+        }
+        .example-item.dragging {
+            opacity: 0.5;
+        }
+        /* Visualization Styles */
+        .viz-container {
+            position: relative;
+            min-height: 400px;
+            width: 100%;
+            overflow: visible;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .viz-node {
+            border-radius: 8px;
+            padding: 12px;
+            margin: 8px;
+            min-width: 150px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 500;
+            word-wrap: break-word;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: absolute;
+            font-family: "Inter", sans-serif;
+        }
+        .viz-outcome {
+            background-color: #d9ead3;
+            border: 2px solid #93c47d;
+            color: #2d5016;
+        }
+        .viz-indicator {
+            background-color: #cfe2f3;
+            border: 2px solid #6fa8dc;
+            color: #1c4587;
+        }
+        .viz-tool {
+            background-color: #f4cccc;
+            border: 2px solid #e06666;
+            color: #990000;
+        }
+        .viz-connection {
+            stroke: #666;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            pointer-events: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-size: 14px;
+            max-width: 200px;
+            z-index: 10;
+        }
+        .header-bg-blue { background-color: #cfe2f3; }
+        .header-bg-red { background-color: #f4cccc; }
+        .header-bg-yellow { background-color: #fce5cd; }
+        .header-bg-green { background-color: #d9ead3; }
+        .header-bg-purple { background-color: #d9d2e9; }
+        .header-bg-teal { background-color: #d0e0e3; }
+    </style>
+</head>
+<body class="p-6 md:p-10">
+    <div class="message-box p-4 bg-green-500 text-white rounded-lg shadow-xl" id="messageBox"></div>
+
+    <div class="container flex flex-col items-center">
+        <div class="mb-6 w-48 md:w-64">
+            <img src="https://static.wixstatic.com/media/2608ce_4ffd1217cfad49bb950c7e852ea7dbc0~mv2.png" alt="Data ChangeMakers Logo" class="w-full h-auto" />
+        </div>
+
+        <div class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Impact Measurement Tool</h1>
+            <p class="text-lg text-gray-600">
+                Develop a data strategy for your impact measurement based on a Theory of Change.
+            </p>
+        </div>
+
+        <div class="card w-full mb-10">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-800">Organization Information</h2>
+            <div class="space-y-6">
+                <div>
+                    <label for="org-name" class="block text-sm font-medium text-gray-700">Organization Name</label>
+                    <input
+                        type="text"
+                        id="org-name"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"
+                        placeholder="e.g., Community First Foundation"
+                    />
+                </div>
+                <div>
+                    <label for="primary-activity-input" class="block text-sm font-medium text-gray-700">Primary Activity</label>
+                    <textarea
+                        id="primary-activity-input"
+                        rows="3"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"
+                        placeholder="e.g., We provide comprehensive financial literacy workshops and one-on-one coaching"
+                    ></textarea>
+                </div>
+                <div>
+                    <label for="social-issue-input" class="block text-sm font-medium text-gray-700">Social Issue You Are Trying to Address</label>
+                    <textarea
+                        id="social-issue-input"
+                        rows="3"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"
+                        placeholder="e.g., the lack of access to financial literacy education for young adults"
+                    ></textarea>
+                </div>
+                <div>
+                    <label for="outcome-trying-input" class="block text-sm font-medium text-gray-700">Outcome You Are Trying to Achieve</label>
+                    <textarea
+                        id="outcome-trying-input"
+                        rows="3"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2"
+                        placeholder="e.g., young adults will have increased financial stability and improved credit scores"
+                    ></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="card w-full mb-10 overflow-x-auto">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-800">Theory of Change</h2>
+            <p class="text-gray-600 mb-4">How does change happen?</p>
+
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr>
+                        <th class="p-4 border border-gray-300 header-bg-yellow font-semibold text-gray-800">Organization</th>
+                        <th class="p-4 border border-gray-300 header-bg-blue font-semibold text-gray-800">Primary Activity</th>
+                        <th class="p-4 border border-gray-300 header-bg-red font-semibold text-gray-800">Social Issue</th>
+                        <th class="p-4 border border-gray-300 header-bg-green font-semibold text-gray-800">Outcome</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="p-4 border border-gray-300" id="theory-org-name">Enter your organization name above</td>
+                        <td class="p-4 border border-gray-300" id="theory-primary-activity">Enter your primary activity above</td>
+                        <td class="p-4 border border-gray-300" id="theory-social-issue">Enter the social issue above</td>
+                        <td class="p-4 border border-gray-300" id="theory-outcome">Enter your outcome above</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="elevator-pitch mt-6">
+                <h3 class="text-xl font-semibold mb-4 text-gray-800">Generated Elevator Pitch</h3>
+                <p
+                    id="generated-elevator-pitch"
+                    class="p-4 bg-blue-50 border-l-4 border-blue-400 rounded-lg text-gray-700"
+                >Complete the fields above to generate your elevator pitch.</p>
+            </div>
+        </div>
+
+        <div class="card w-full mb-10 overflow-x-auto">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-800">Logic Model</h2>
+            <p class="text-gray-600 mb-4">How is our work supposed to create change?</p>
+            
+            <!-- Industry Selection -->
+            <div class="mb-6">
+                <label for="industrySelect" class="block text-sm font-medium text-gray-700">Select Industry (Optional)</label>
+                <select id="industrySelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                    <option value="">Select an industry for customized examples...</option>
+                </select>
+            </div>
+            
+            <!-- Examples Section -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold mb-3 text-gray-700">Examples (Drag and Drop)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div class="examples-container">
+                        <h4 class="font-medium text-sm text-gray-600 mb-2">Inputs Examples</h4>
+                        <div id="inputsExamples">
+                            <div class="example-item" draggable="true" data-type="inputs">Funding</div>
+                            <div class="example-item" draggable="true" data-type="inputs">In-kind donations</div>
+                            <div class="example-item" draggable="true" data-type="inputs">Referrals</div>
+                            <div class="example-item" draggable="true" data-type="inputs">Staff</div>
+                            <div class="example-item" draggable="true" data-type="inputs">Volunteers</div>
+                        </div>
+                    </div>
+                    <div class="examples-container">
+                        <h4 class="font-medium text-sm text-gray-600 mb-2">Activities Examples</h4>
+                        <div id="activitiesExamples">
+                            <div class="example-item" draggable="true" data-type="activities">Communications</div>
+                            <div class="example-item" draggable="true" data-type="activities">Events</div>
+                            <div class="example-item" draggable="true" data-type="activities">Focus Groups</div>
+                            <div class="example-item" draggable="true" data-type="activities">Sessions</div>
+                            <div class="example-item" draggable="true" data-type="activities">Staff induction</div>
+                            <div class="example-item" draggable="true" data-type="activities">Workshops</div>
+                        </div>
+                    </div>
+                    <div class="examples-container">
+                        <h4 class="font-medium text-sm text-gray-600 mb-2">Outputs Examples</h4>
+                        <div id="outputsExamples">
+                            <div class="example-item" draggable="true" data-type="outputs"># hours</div>
+                            <div class="example-item" draggable="true" data-type="outputs"># of students</div>
+                            <div class="example-item" draggable="true" data-type="outputs"># of referrals</div>
+                            <div class="example-item" draggable="true" data-type="outputs"># of teachers</div>
+                        </div>
+                    </div>
+                    <div class="examples-container outcomes-section">
+                        <h4 class="font-medium text-sm text-gray-600 mb-2">Outcomes Examples</h4>
+                        <div id="outcomesExamples">
+                            <div class="example-item" draggable="true" data-type="outcomes">All Children are engaged and benefit from schooling</div>
+                            <div class="example-item" draggable="true" data-type="outcomes">All Children are safe from harm</div>
+                            <div class="example-item" draggable="true" data-type="outcomes">All adults are trained</div>
+                            <div class="example-item" draggable="true" data-type="outcomes">Decreased social isolation</div>
+                        </div>
+                    </div>
+                    <div class="examples-container impact-section">
+                        <h4 class="font-medium text-sm text-gray-600 mb-2">Impact Examples</h4>
+                        <div id="impactExamples">
+                            <div class="example-item" draggable="true" data-type="impact">End Poverty</div>
+                            <div class="example-item" draggable="true" data-type="impact">Improved community wellbeing</div>
+                            <div class="example-item" draggable="true" data-type="impact">Sustainable social change</div>
+                            <div class="example-item" draggable="true" data-type="impact">Reduced inequality</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+                <div id="inputs-section" class="logic-model-section space-y-2">
+                    <h3 class="font-bold p-2 header-bg-blue rounded-md">Inputs</h3>
+                    <p class="text-sm text-gray-600 p-2">What resources do you need to deliver your work?</p>
+                    <div id="inputs-group" class="space-y-2"></div>
+                    <button
+                        class="add-item-btn mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        data-type="inputs"
+                    >+ Add another</button>
+                </div>
+                <div id="activities-section" class="logic-model-section space-y-2 disabled">
+                    <h3 class="font-bold p-2 header-bg-red rounded-md">Activities</h3>
+                    <p class="text-sm text-gray-600 p-2">What are the main activities of your work?</p>
+                    <div id="activities-group" class="space-y-2"></div>
+                    <button
+                        class="add-item-btn mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        data-type="activities"
+                    >+ Add another</button>
+                </div>
+                <div id="outputs-section" class="logic-model-section space-y-2 disabled">
+                    <h3 class="font-bold p-2 header-bg-yellow rounded-md">Outputs</h3>
+                    <p class="text-sm text-gray-600 p-2">What are the direct results of your activities?</p>
+                    <div id="outputs-group" class="space-y-2"></div>
+                    <button
+                        class="add-item-btn mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        data-type="outputs"
+                    >+ Add another</button>
+                </div>
+                <div id="outcomes-section" class="logic-model-section space-y-2 disabled">
+                    <h3 class="font-bold p-2 header-bg-green rounded-md">Outcomes</h3>
+                    <p class="text-sm text-gray-600 p-2">What changes do you expect to see as a result of your work?</p>
+                    <div id="outcomes-group" class="space-y-2"></div>
+                    <button
+                        class="add-item-btn mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        data-type="outcomes"
+                    >+ Add another</button>
+                </div>
+                <div id="impact-section" class="logic-model-section space-y-2 disabled">
+                    <h3 class="font-bold p-2 header-bg-purple rounded-md">Impact</h3>
+                    <p class="text-sm text-gray-600 p-2">What is the long-term, broader change you hope to achieve?</p>
+                    <div id="impact-group" class="space-y-2"></div>
+                    <button
+                        class="add-item-btn mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        data-type="impact"
+                    >+ Add another</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card w-full mb-10 overflow-x-auto">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-800">Evaluation Framework</h2>
+            <p class="text-gray-600 mb-4">How will we know we've created the change we intended?</p>
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr>
+                        <th class="p-4 border border-gray-300 header-bg-green font-semibold text-gray-800">Outcome</th>
+                        <th class="p-4 border border-gray-300 header-bg-teal font-semibold text-gray-800">Indicators</th>
+                        <th class="p-4 border border-gray-300 header-bg-red font-semibold text-gray-800">Measurement Tools</th>
+                    </tr>
+                </thead>
+                <tbody id="evaluation-table-body">
+                    <tr>
+                        <td colspan="3" class="p-4 text-center italic text-gray-500">Add outcomes in the Logic Model section to populate this table.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card w-full mb-10">
+            <h2 class="text-2xl font-semibold mb-6 text-gray-800">Evaluation Framework Visualization</h2>
+            <div id="visualization-container" class="w-full flex flex-col items-center">
+                <div id="evaluation-viz" class="viz-container w-full bg-white"></div>
+                <button
+                    id="export-viz-btn"
+                    class="mt-4 bg-gray-200 text-gray-800 font-medium py-2 px-6 rounded-full shadow-lg hover:bg-gray-300 transition-colors duration-300"
+                >
+                    Export Visualization to PNG
+                </button>
+            </div>
+        </div>
+
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>
+                Learn more at
+                <a href="https://www.datachangemakers.org/" target="_blank" class="text-blue-600 hover:underline"
+                    >www.datachangemakers.org</a
+                >
+            </p>
+            <p>
+                Contact us:
+                <a href="mailto:info@datachangemakers.org" class="text-blue-600 hover:underline">info@datachangemakers.org</a>
+            </p>
+        </footer>
+    </div>
+
+    <div class="fixed bottom-6 right-6 z-50">
+        <button
+            id="export-btn"
+            class="bg-blue-600 text-white font-medium py-3 px-8 rounded-full shadow-lg hover:bg-blue-700 transition-colors duration-300"
+        >
+            Export to Excel
+        </button>
+    </div>
+
+    <script>
+          // Industry data from Google Sheet
+        const industryData = {
+            "Youth Development": {
+                "Inputs": ["Youth workers", "Program materials", "Safe meeting spaces", "Mentors", "Volunteers", "School partnerships"],
+                "Activities": ["Mentoring programs", "After-school workshops", "Leadership camps", "Skills training", "Peer support groups"],
+                "Outputs": ["100 students in mentorship program", "5 leadership camps held annually", "20 workshops delivered per semester"],
+                "Outcomes": ["Youth demonstrate increased self-esteem and confidence", "Improved communication and teamwork skills", "Higher percentage enroll in higher education"],
+                "Impact": ["More engaged and responsible young citizens", "Reduced juvenile delinquency rates", "Stronger pipeline of future leaders"]
+            },
+            "Food Security": {
+                "Inputs": ["Food donations", "Volunteers", "Cold storage facilities", "Community partners", "Transportation"],
+                "Activities": ["Food bank operations", "Community food drives", "Mobile food pantries", "Urban farming initiatives"],
+                "Outputs": ["1,000 families served weekly", "5,000 pounds of food distributed monthly", "3 mobile pantry events per month"],
+                "Outcomes": ["Families report reduced food insecurity", "Access to nutritious food", "Decreased diet-related health issues"],
+                "Impact": ["Community where everyone has reliable access to healthy food", "Improved public health", "Stronger local food system"]
+            },
+            "Mental Health Support": {
+                "Inputs": ["Licensed therapists", "Peer counselors", "Consultation rooms", "Online resources", "Hospital partnerships"],
+                "Activities": ["Individual and group therapy sessions", "Stress management workshops", "Suicide prevention hotlines", "Support groups"],
+                "Outputs": ["50 therapy sessions weekly", "10 support groups running", "5 educational seminars monthly"],
+                "Outcomes": ["Clients report reduced anxiety/depression symptoms", "Better coping mechanisms", "Increased awareness of mental health resources"],
+                "Impact": ["De-stigmatized mental health community", "Improved overall well-being", "Reduced suicide and self-harm rates"]
+            },
+            "Community Development": {
+                "Inputs": ["Community organizers", "Government grants", "Business partnerships", "Volunteers", "Community center space"],
+                "Activities": ["Neighborhood beautification projects", "Public forums on local issues", "Small business incubation", "Skill-building workshops"],
+                "Outputs": ["5 beautification projects completed", "2 public forums held", "10 small businesses launched with support"],
+                "Outcomes": ["Greater sense of community ownership and pride", "Local business growth", "New job creation"],
+                "Impact": ["Economic revitalization in underserved areas", "More connected and resilient community", "Safer neighborhood for all"]
+            },
+            "Social Services (Homelessness)": {
+                "Inputs": ["Staff", "Food", "Clothing", "Shelter beds", "Case management funding", "Community partnerships"],
+                "Activities": ["Daily meals and shelter provision", "Case management", "Job readiness training", "Housing placement assistance"],
+                "Outputs": ["2,000 nights of shelter provided", "6,000 meals served", "50 individuals placed in housing"],
+                "Outcomes": ["Individuals secure stable housing", "Obtain employment", "Reduce reliance on public assistance", "Improved well-being"],
+                "Impact": ["Reduced community homelessness", "Improved health outcomes for vulnerable populations", "Stronger local economy"]
+            },
+            "K-12 Education Support": {
+                "Inputs": ["Certified teachers", "Volunteers", "Funding", "Classroom space", "Tutoring software", "Books"],
+                "Activities": ["One-on-one tutoring sessions", "Small group workshops", "Homework assistance", "Mentor check-ins"],
+                "Outputs": ["100 students tutored", "500 tutoring sessions completed", "20 workshops delivered"],
+                "Outcomes": ["Improved test scores", "Increased academic confidence", "Higher high school graduation rates"],
+                "Impact": ["Improved academic performance across community", "Increased college attendance", "Higher employment rates for graduates"]
+            },
+            "Adult Education & Literacy": {
+                "Inputs": ["Adult education instructors", "Learning materials", "Classroom facilities", "Technology access", "Childcare support"],
+                "Activities": ["Basic literacy classes", "GED preparation", "English as Second Language (ESL) programs", "Digital literacy training"],
+                "Outputs": ["200 adults enrolled in programs", "150 GED certificates earned", "100 ESL students graduated"],
+                "Outcomes": ["Adults gain basic literacy skills", "Obtain high school equivalency", "Improve job prospects", "Increased confidence"],
+                "Impact": ["More skilled workforce", "Reduced intergenerational poverty", "Stronger community economic development"]
+            },
+            "Higher Education Access": {
+                "Inputs": ["Scholarship funds", "College counselors", "Test prep materials", "University partnerships", "Mentors"],
+                "Activities": ["College application assistance", "Scholarship application support", "Campus visits", "Financial aid workshops"],
+                "Outputs": ["500 students receive college counseling", "200 scholarship applications submitted", "50 campus visits organized"],
+                "Outcomes": ["Increased college enrollment among first-generation students", "Higher scholarship award rates", "Improved college readiness"],
+                "Impact": ["Breaking cycles of poverty through education", "More diverse higher education institutions", "Stronger professional workforce"]
+            },
+            "Early Childhood Education": {
+                "Inputs": ["Early childhood educators", "Learning materials", "Safe classroom space", "Nutritious meals", "Family support staff"],
+                "Activities": ["Preschool programs", "Parent education workshops", "Developmental screenings", "Family engagement activities"],
+                "Outputs": ["150 children enrolled in preschool", "100 families participate in workshops", "200 developmental screenings completed"],
+                "Outcomes": ["Children demonstrate school readiness skills", "Parents gain parenting knowledge", "Early identification of developmental delays"],
+                "Impact": ["Reduced achievement gaps", "Improved long-term educational outcomes", "Stronger family units"]
+            },
+            "Healthcare Access": {
+                "Inputs": ["Doctors", "Nurses", "Medical supplies", "Mobile clinic vehicle", "Hospital partnerships"],
+                "Activities": ["Free health screenings", "Basic medical consultations", "Vaccination clinics", "Health education seminars"],
+                "Outputs": ["250 patients seen weekly", "1,000 health screenings performed", "10 educational events held"],
+                "Outcomes": ["Increased early detection of chronic diseases", "Adoption of healthier habits", "Reduced emergency room visits"],
+                "Impact": ["Overall improvement in community health outcomes", "Reduced healthcare disparities", "Healthier and more productive population"]
+            },
+            "Environmental Conservation": {
+                "Inputs": ["Volunteers", "Gardening tools", "Seeds and soil", "Donated land", "Educational materials"],
+                "Activities": ["Weekly community gardening sessions", "Composting workshops", "Local clean-up events", "Sustainability education"],
+                "Outputs": ["15 community gardens established", "500 pounds of produce harvested", "10 workshops conducted"],
+                "Outcomes": ["Access to fresh produce", "Increased local biodiversity", "Knowledge of sustainable food systems"],
+                "Impact": ["Healthier community members", "Reduced food insecurity", "Stronger local ecosystems", "Increased environmental stewardship"]
+            },
+            "Arts and Culture": {
+                "Inputs": ["Artists", "Studio space", "Art supplies", "Event funding", "Partnerships with galleries"],
+                "Activities": ["Art classes for youth and adults", "Public art exhibits", "Community workshops", "Performances"],
+                "Outputs": ["10 art classes per quarter", "3 public exhibits", "50 individuals participating in workshops"],
+                "Outcomes": ["Community members gain creative skills", "Increased appreciation for local art", "Stronger artistic community"],
+                "Impact": ["Enhanced cultural vitality", "Increased community pride", "Economic development through arts"]
+            }
+        };
+
+        // State management
+        const state = {
+            pitch: {},
+            logicModel: {
+                inputs: [""],
+                activities: [""],
+                outputs: [""],
+                outcomes: [""],
+                impact: [""],
+            },
+            evaluationFramework: [],
+        };
+
+        const dummyData = {
+            pitch: {
+                orgName: "Data Changemakers",
+                primaryActivity: "equips mission-led organizations with data skills and tools to amplify their social impact",
+                socialIssue: "We're tackling the gap in data skills and capacity that prevents nonprofits from fully demonstrating and amplifying their social impact",
+                outcome: "confidently use data to tell their stories, make informed decisions, and create greater social impact",
+            },
+            logicModel: {
+                inputs: ["Volunteer hours", "Workshop materials", "Funding", "Partnerships with local banks"],
+                activities: ["Host weekly financial literacy workshops", "Provide one-on-one financial coaching sessions", "Distribute budgeting tools and resources"],
+                outputs: ["10 workshops hosted", "50 participants enrolled in coaching", "100 resource packets distributed"],
+                outcomes: ["Participants have increased confidence in managing their finances", "Participants improve their credit scores"],
+                impact: ["Increased financial stability for young adults in the community", "Reduced reliance on predatory loans"],
+            },
+        };
+
+        // Function definitions
+        const showMessage = (message, type = "error") => {
+            const messageBox = document.getElementById("messageBox");
+            messageBox.textContent = message;
+            messageBox.className = `message-box show p-4 rounded-lg shadow-xl ${
+                type === "success" ? "bg-green-500 text-white" : "bg-red-500 text-white"
+            }`;
+            setTimeout(() => {
+                messageBox.classList.remove("show");
+            }, 3000);
+        };
+
+        // Update examples based on industry selection
+        const updateExamples = (industry) => {
+            const defaultExamples = {
+                "Inputs": ["Funding", "In-kind donations", "Referrals", "Staff", "Volunteers"],
+                "Activities": ["Communications", "Events", "Focus Groups", "Sessions", "Staff induction", "Workshops"],
+                "Outputs": ["# hours", "# of students", "# of referrals", "# of teachers"],
+                "Outcomes": ["All Children are engaged and benefit from schooling", "All Children are safe from harm", "All adults are trained", "Decreased social isolation"],
+                "Impact": ["End Poverty", "Improved community wellbeing", "Sustainable social change", "Reduced inequality"]
+            };
+
+            const examples = industry && industryData[industry] ? industryData[industry] : defaultExamples;
+
+            // Update each example section
+            const sections = ["Inputs", "Activities", "Outputs", "Outcomes", "Impact"];
+            sections.forEach(section => {
+                const containerId = section.toLowerCase() + "Examples";
+                const container = document.getElementById(containerId);
+                if (container) {
+                    container.innerHTML = "";
+                    examples[section].forEach(example => {
+                        const item = document.createElement("div");
+                        item.className = "example-item";
+                        item.draggable = true;
+                        item.dataset.type = section.toLowerCase();
+                        item.textContent = example;
+                        item.dataset.text = example; // Add data-text attribute
+                        container.appendChild(item);
+                    });
+                }
+            });
+
+            // Re-initialize drag and drop for new items
+            initializeDragAndDrop();
+        };
+
+        // Update Theory of Change table and generate elevator pitch (without Target Audience)
+        const updateTheoryOfChange = () => {
+            const orgName = document.getElementById("org-name").value.trim();
+            const primaryActivity = document.getElementById("primary-activity-input").value.trim();
+            const socialIssue = document.getElementById("social-issue-input").value.trim();
+            const outcome = document.getElementById("outcome-trying-input").value.trim();
+
+            // Update Theory of Change table
+            document.getElementById("theory-org-name").textContent = orgName || "Enter your organization name above";
+            document.getElementById("theory-primary-activity").textContent = primaryActivity || "Enter your primary activity above";
+            document.getElementById("theory-social-issue").textContent = socialIssue || "Enter the social issue above";
+            document.getElementById("theory-outcome").textContent = outcome || "Enter your outcome above";
+
+            // Generate elevator pitch (without Target Audience)
+            if (orgName && primaryActivity && socialIssue && outcome) {
+                const elevatorPitch = `${orgName} ${primaryActivity}. ${socialIssue}. ${outcome}.`;
+                document.getElementById("generated-elevator-pitch").textContent = elevatorPitch;
+            } else {
+                document.getElementById("generated-elevator-pitch").textContent = "Complete the fields above to generate your elevator pitch.";
+            }
+        };
+
+        // Add item to logic model
+        const addLogicModelItem = (type, text = "") => {
+            if (!state.logicModel[type]) {
+                state.logicModel[type] = [];
+            }
+            if (!state.logicModel[type].includes(text)) {
+                state.logicModel[type].push(text);
+            }
+            renderLogicModel();
+            
+            // Update evaluation framework if outcomes are added
+            if (type === "outcomes") {
+                updateEvaluationFramework();
+            }
+            
+            checkLogicModelCompletion();
+        };
+
+        // Remove item from logic model
+        const removeLogicModelItem = (type, index) => {
+            if (state.logicModel[type] && state.logicModel[type].length > 1) {
+                state.logicModel[type].splice(index, 1);
+                renderLogicModel();
+                if (type === "outcomes") {
+                    updateEvaluationFramework();
+                }
+                checkLogicModelCompletion();
+            }
+        };
+
+        // Render logic model
+        const renderLogicModel = () => {
+            const types = ["inputs", "activities", "outputs", "outcomes", "impact"];
+            
+            types.forEach(type => {
+                const container = document.getElementById(`${type}-group`);
+                container.innerHTML = "";
+                
+                state.logicModel[type].forEach((item, index) => {
+                    const itemDiv = document.createElement("div");
+                    itemDiv.className = "outcome-item";
+                    
+                    // Fix placeholder text for proper grammar
+                    let placeholderText = "";
+                    if (type === "inputs") placeholderText = "Enter input";
+                    else if (type === "activities") placeholderText = "Enter activity";
+                    else if (type === "outputs") placeholderText = "Enter output";
+                    else if (type === "outcomes") placeholderText = "Enter outcome";
+                    else if (type === "impact") placeholderText = "Enter impact";
+                    
+                    itemDiv.innerHTML = `
+                        <textarea 
+                            class="w-full p-2 border border-gray-300 rounded-md resize-none" 
+                            rows="2" 
+                            placeholder="${placeholderText}"
+                            data-type="${type}" 
+                            data-index="${index}"
+                        >${item}</textarea>
+                        ${state.logicModel[type].length > 1 ? `<button class=\"remove-btn\" data-type=\"${type}\" data-index=\"${index}\">×</button>` : ""}
+                    `;
+                    container.appendChild(itemDiv);
+                });
+            });
+
+            // Add event listeners for textareas
+            document.querySelectorAll("#inputs-group textarea, #activities-group textarea, #outputs-group textarea, #outcomes-group textarea, #impact-group textarea").forEach(textarea => {
+                textarea.addEventListener("input", (e) => {
+                    const type = e.target.dataset.type;
+                    const index = parseInt(e.target.dataset.index);
+                    state.logicModel[type][index] = e.target.value;
+                    
+                    if (type === "outcomes") {
+                        updateEvaluationFramework();
+                    }
+                    checkLogicModelCompletion();
+                });
+            });
+
+            // Add event listeners for remove buttons
+            document.querySelectorAll(".remove-btn").forEach(button => {
+                button.addEventListener("click", (e) => {
+                    const type = e.target.dataset.type;
+                    const index = parseInt(e.target.dataset.index);
+                    removeLogicModelItem(type, index);
+                });
+            });
+        };
+
+        // Check completion of logic model sections to enable/disable next sections
+        const checkLogicModelCompletion = () => {
+            const sections = ["inputs", "activities", "outputs", "outcomes", "impact"];
+            
+            for (let i = 0; i < sections.length; i++) {
+                const currentSection = document.getElementById(`${sections[i]}-section`);
+                const isComplete = state.logicModel[sections[i]].some(item => item.trim() !== "");
+                
+                if (i === 0) {
+                    // Inputs section is always enabled
+                    currentSection.classList.remove("disabled");
+                } else {
+                    // Check if previous section is complete
+                    const prevSectionComplete = state.logicModel[sections[i-1]].some(item => item.trim() !== "");
+                    
+                    if (prevSectionComplete) {
+                        currentSection.classList.remove("disabled");
+                    } else {
+                        currentSection.classList.add("disabled");
+                        // Disable all subsequent sections too
+                        for (let j = i; j < sections.length; j++) {
+                            document.getElementById(`${sections[j]}-section`).classList.add("disabled");
+                        }
+                        break;
+                    }
+                }
+            }
+        };
+
+        // Drag and Drop functionality
+        const initializeDragAndDrop = () => {
+            // Add drag event listeners to example items
+            document.querySelectorAll('.example-item').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', e.target.textContent);
+                    e.dataTransfer.setData('application/x-type', e.target.dataset.type);
+                    e.target.classList.add('dragging');
+                });
+
+                item.addEventListener('dragend', (e) => {
+                    e.target.classList.remove('dragging');
+                });
+            });
+
+            // Add drop event listeners to logic model sections
+            document.querySelectorAll('.logic-model-section').forEach(section => {
+                section.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (!section.classList.contains('disabled')) {
+                        section.classList.add('drag-over');
+                    }
+                });
+
+                section.addEventListener('dragleave', (e) => {
+                    section.classList.remove('drag-over');
+                });
+
+                section.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    section.classList.remove('drag-over');
+                    
+                    const text = e.dataTransfer.getData('text/plain');
+                    const sourceType = e.dataTransfer.getData('application/x-type');
+                    const targetType = section.id.replace('-section', '');
+                    
+                    // Only allow dropping on the correct section or activities (which accepts any type)
+                    if (sourceType === targetType || targetType === 'activities') {
+                        // Check if section is enabled
+                        if (!section.classList.contains('disabled')) {
+                            addLogicModelItem(targetType, text);
+                        }
+                    }
+                });
+            });
+        };
+
+        // Update evaluation framework based on outcomes
+        const updateEvaluationFramework = () => {
+            const outcomes = state.logicModel.outcomes.filter(outcome => outcome.trim() !== "");
+            
+            // Update state.evaluationFramework to match current outcomes
+            state.evaluationFramework = outcomes.map((outcome, index) => {
+                const existing = state.evaluationFramework[index];
+                return {
+                    outcome: outcome,
+                    indicators: existing ? existing.indicators : [""],
+                    measurementTools: existing ? existing.measurementTools : [""]
+                };
+            });
+
+            renderEvaluationFramework();
+        };
+
+        // Render evaluation framework table
+        const renderEvaluationFramework = () => {
+            const evaluationTableBody = document.getElementById("evaluation-table-body");
+            evaluationTableBody.innerHTML = "";
+
+            const validOutcomes = state.evaluationFramework.filter((d) => d.outcome.trim() !== "");
+
+            if (validOutcomes.length === 0) {
+                evaluationTableBody.innerHTML = `
+                    <tr>
+                        <td colspan=\"3\" class=\"p-4 text-center italic text-gray-500\">Add outcomes in the Logic Model section to populate this table.</td>
+                    </tr>
+                `;
+                generateVisualization();
+                return;
+            }
+
+            validOutcomes.forEach((item, outcomeIndex) => {
+                const numItems = Math.max(item.indicators.length, item.measurementTools.length);
+
+                for (let i = 0; i < Math.max(numItems, 1); i++) {
+                    const row = document.createElement("tr");
+
+                    if (i === 0) {
+                        const outcomeCell = document.createElement("td");
+                        outcomeCell.className = "p-4 border border-gray-300 align-top";
+                        outcomeCell.rowSpan = Math.max(numItems, 1);
+                        outcomeCell.innerHTML = `
+                            <div class=\"flex items-start\">
+                                <span class=\"flex-grow\">${item.outcome}</span>
+                                <button
+                                    data-outcome-index=\"${outcomeIndex}\"
+                                    class=\"add-indicator-btn ml-2 text-blue-600 hover:text-blue-800 text-xs font-medium\"
+                                    type=\"button\"
+                                >+ Add indicator</button>
+                            </div>
+                        `;
+                        row.appendChild(outcomeCell);
+                    }
+
+                    const indicatorCell = document.createElement("td");
+                    indicatorCell.className = "p-2 border border-gray-300";
+                    indicatorCell.innerHTML = `<textarea rows=\"4\" class=\"w-full h-full p-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm resize-none\" data-outcome-index=\"${outcomeIndex}\" data-indicator-index=\"${i}\" placeholder=\"e.g., Increase in participant confidence\">${item.indicators[i] || ""}</textarea>`;
+                    row.appendChild(indicatorCell);
+
+                    const toolCell = document.createElement("td");
+                    toolCell.className = "p-2 border border-gray-300";
+                    toolCell.innerHTML = `<textarea rows=\"4\" class=\"w-full h-full p-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm resize-none\" data-outcome-index=\"${outcomeIndex}\" data-tool-index=\"${i}\" placeholder=\"e.g., Post-program survey\">${item.measurementTools[i] || ""}</textarea>`;
+                    row.appendChild(toolCell);
+
+                    evaluationTableBody.appendChild(row);
+                }
+            });
+
+            // Add event listeners for add indicator buttons
+            document.querySelectorAll(".add-indicator-btn").forEach((button) => {
+                button.addEventListener("click", (e) => {
+                    const outcomeIndex = parseInt(e.target.dataset.outcomeIndex, 10);
+                    state.evaluationFramework[outcomeIndex].indicators.push("");
+                    state.evaluationFramework[outcomeIndex].measurementTools.push("");
+                    renderEvaluationFramework();
+                });
+            });
+
+            // Add event listeners for indicator textareas
+            document.querySelectorAll("#evaluation-table-body textarea[data-indicator-index]").forEach((textarea) => {
+                textarea.addEventListener("input", (e) => {
+                    const outcomeIndex = parseInt(e.target.dataset.outcomeIndex, 10);
+                    const indicatorIndex = parseInt(e.target.dataset.indicatorIndex, 10);
+                    state.evaluationFramework[outcomeIndex].indicators[indicatorIndex] = e.target.value;
+                    generateVisualization();
+                });
+            });
+
+            // Add event listeners for measurement tool textareas
+            document.querySelectorAll("#evaluation-table-body textarea[data-tool-index]").forEach((textarea) => {
+                textarea.addEventListener("input", (e) => {
+                    const outcomeIndex = parseInt(e.target.dataset.outcomeIndex, 10);
+                    const toolIndex = parseInt(e.target.dataset.toolIndex, 10);
+                    state.evaluationFramework[outcomeIndex].measurementTools[toolIndex] = e.target.value;
+                    generateVisualization();
+                });
+            });
+
+            generateVisualization();
+        };
+
+        // Generate flowchart-style visualization
+        const generateVisualization = () => {
+            const container = document.getElementById("evaluation-viz");
+            container.innerHTML = "";
+
+            const validOutcomes = state.evaluationFramework.filter(d => d.outcome.trim() !== "");
+            
+            if (validOutcomes.length === 0) {
+                container.innerHTML = '<div class=\"flex items-center justify-center h-32 text-gray-500\">Add outcomes and indicators to see visualization</div>';
+                return;
+            }
+
+            // Create SVG container
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("width", "100%");
+            svg.setAttribute("height", "600");
+            svg.style.position = "absolute";
+            svg.style.top = "0";
+            svg.style.left = "0";
+            svg.style.zIndex = "1";
+
+            // Add arrow marker definition
+            const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+            const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+            marker.setAttribute("id", "arrowhead");
+            marker.setAttribute("markerWidth", "10");
+            marker.setAttribute("markerHeight", "7");
+            marker.setAttribute("refX", "9");
+            marker.setAttribute("refY", "3.5");
+            marker.setAttribute("orient", "auto");
+            
+            const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+            polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
+            polygon.setAttribute("fill", "#666");
+            
+            marker.appendChild(polygon);
+            defs.appendChild(marker);
+            svg.appendChild(defs);
+
+            const nodeWidth = 180;
+            const nodeHeight = 80;
+            const verticalSpacing = 120;
+            const horizontalSpacing = 220;
+
+            let yOffset = 50;
+            let maxHeight = 0;
+
+            validOutcomes.forEach((outcome, outcomeIndex) => {
+                const validIndicators = outcome.indicators.filter(ind => ind.trim() !== "");
+                const validTools = outcome.measurementTools.filter(tool => tool.trim() !== "");
+                
+                const maxItems = Math.max(validIndicators.length, validTools.length, 1);
+                
+                // Calculate positions
+                const outcomeX = 50;
+                const outcomeY = yOffset + (maxItems - 1) * verticalSpacing / 2;
+                
+                // Create outcome node
+                const outcomeNode = document.createElement("div");
+                outcomeNode.className = "viz-node viz-outcome";
+                outcomeNode.style.left = `${outcomeX}px`;
+                outcomeNode.style.top = `${outcomeY}px`;
+                outcomeNode.style.width = `${nodeWidth}px`;
+                outcomeNode.style.height = `${nodeHeight}px`;
+                outcomeNode.style.zIndex = "2";
+                outcomeNode.textContent = outcome.outcome;
+                container.appendChild(outcomeNode);
+
+                // Create indicator and tool nodes
+                for (let i = 0; i < maxItems; i++) {
+                    const itemY = yOffset + i * verticalSpacing;
+                    
+                    // Indicator node
+                    if (i < validIndicators.length && validIndicators[i].trim() !== "") {
+                        const indicatorX = outcomeX + horizontalSpacing;
+                        
+                        const indicatorNode = document.createElement("div");
+                        indicatorNode.className = "viz-node viz-indicator";
+                        indicatorNode.style.left = `${indicatorX}px`;
+                        indicatorNode.style.top = `${itemY}px`;
+                        indicatorNode.style.width = `${nodeWidth}px`;
+                        indicatorNode.style.height = `${nodeHeight}px`;
+                        indicatorNode.style.zIndex = "2";
+                        indicatorNode.textContent = validIndicators[i];
+                        container.appendChild(indicatorNode);
+
+                        // Connection from outcome to indicator
+                        const line1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                        line1.setAttribute("x1", outcomeX + nodeWidth);
+                        line1.setAttribute("y1", outcomeY + nodeHeight / 2);
+                        line1.setAttribute("x2", indicatorX);
+                        line1.setAttribute("y2", itemY + nodeHeight / 2);
+                        line1.setAttribute("class", "viz-connection");
+                        svg.appendChild(line1);
+
+                        // Tool node
+                        if (i < validTools.length && validTools[i].trim() !== "") {
+                            const toolX = indicatorX + horizontalSpacing;
+                            
+                            const toolNode = document.createElement("div");
+                            toolNode.className = "viz-node viz-tool";
+                            toolNode.style.left = `${toolX}px`;
+                            toolNode.style.top = `${itemY}px`;
+                            toolNode.style.width = `${nodeWidth}px`;
+                            toolNode.style.height = `${nodeHeight}px`;
+                            toolNode.style.zIndex = "2";
+                            toolNode.textContent = validTools[i];
+                            container.appendChild(toolNode);
+
+                            // Connection from indicator to tool
+                            const line2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                            line2.setAttribute("x1", indicatorX + nodeWidth);
+                            line2.setAttribute("y1", itemY + nodeHeight / 2);
+                            line2.setAttribute("x2", toolX);
+                            line2.setAttribute("y2", itemY + nodeHeight / 2);
+                            line2.setAttribute("class", "viz-connection");
+                            svg.appendChild(line2);
+                        }
+                    }
+                }
+
+                yOffset += maxItems * verticalSpacing + 100;
+                maxHeight = Math.max(maxHeight, yOffset);
+            });
+
+            // Set container and SVG height based on content
+            container.style.height = `${maxHeight}px`;
+            svg.setAttribute("height", maxHeight.toString());
+            container.appendChild(svg);
+        };
+
+        // Export to Excel with better error handling (without Target Audience)
+        const exportToExcel = () => {
+            try {
+                if (typeof XLSX === "undefined") {
+                    showMessage("Excel export library not loaded. Please refresh the page and try again.");
+                    return;
+                }
+
+                const workbook = XLSX.utils.book_new();
+
+                // Organization Information (without Target Audience)
+                const orgData = [
+                    ["Organization Information"],
+                    ["Organization Name", document.getElementById("org-name").value || ""],
+                    ["Primary Activity", document.getElementById("primary-activity-input").value || ""],
+                    ["Social Issue", document.getElementById("social-issue-input").value || ""],
+                    ["Outcome", document.getElementById("outcome-trying-input").value || ""],
+                    [],
+                    ["Generated Elevator Pitch"],
+                    [document.getElementById("generated-elevator-pitch").textContent || ""]
+                ];
+
+                const orgSheet = XLSX.utils.aoa_to_sheet(orgData);
+                XLSX.utils.book_append_sheet(workbook, orgSheet, "Organization Info");
+
+                // Logic Model
+                const logicData = [["Logic Model"]];
+                const maxLength = Math.max(
+                    state.logicModel.inputs.length,
+                    state.logicModel.activities.length,
+                    state.logicModel.outputs.length,
+                    state.logicModel.outcomes.length,
+                    state.logicModel.impact.length
+                );
+
+                logicData.push(["Inputs", "Activities", "Outputs", "Outcomes", "Impact"]);
+                
+                for (let i = 0; i < maxLength; i++) {
+                    logicData.push([
+                        state.logicModel.inputs[i] || "",
+                        state.logicModel.activities[i] || "",
+                        state.logicModel.outputs[i] || "",
+                        state.logicModel.outcomes[i] || "",
+                        state.logicModel.impact[i] || ""
+                    ]);
+                }
+
+                const logicSheet = XLSX.utils.aoa_to_sheet(logicData);
+                XLSX.utils.book_append_sheet(workbook, logicSheet, "Logic Model");
+
+                // Evaluation Framework
+                const evalData = [["Evaluation Framework"], ["Outcome", "Indicators", "Measurement Tools"]];
+                
+                state.evaluationFramework.forEach(item => {
+                    const maxItems = Math.max(item.indicators.length, item.measurementTools.length);
+                    for (let i = 0; i < maxItems; i++) {
+                        evalData.push([
+                            i === 0 ? item.outcome : "",
+                            item.indicators[i] || "",
+                            item.measurementTools[i] || ""
+                        ]);
+                    }
+                });
+
+                const evalSheet = XLSX.utils.aoa_to_sheet(evalData);
+                XLSX.utils.book_append_sheet(workbook, evalSheet, "Evaluation Framework");
+
+                XLSX.writeFile(workbook, "Impact_Measurement_Tool.xlsx");
+                showMessage("Excel file exported successfully!", "success");
+            } catch (error) {
+                console.error("Export error:", error);
+                showMessage("Error exporting to Excel: " + error.message);
+            }
+        };
+
+        // Export visualization to PNG with title and organization name
+        const exportVisualizationToPng = () => {
+            try {
+                const vizContainer = document.getElementById("evaluation-viz");
+                
+                if (vizContainer.innerHTML.includes("Add outcomes and indicators")) {
+                    showMessage("No visualization to export. Please add outcomes and indicators first.");
+                    return;
+                }
+
+                if (typeof html2canvas !== "undefined") {
+                    // Get organization name
+                    const orgName = document.getElementById("org-name").value.trim() || "Organization";
+                    
+                    // Create a temporary container with header
+                    const exportContainer = document.createElement("div");
+                    exportContainer.style.position = "absolute";
+                    exportContainer.style.left = "-9999px";
+                    exportContainer.style.top = "-9999px";
+                    exportContainer.style.background = "white";
+                    exportContainer.style.padding = "40px";
+                    exportContainer.style.fontFamily = "Inter, sans-serif";
+                    exportContainer.style.width = (vizContainer.scrollWidth + 80) + "px";
+                    
+                    // Add header
+                    const header = document.createElement("div");
+                    header.style.textAlign = "center";
+                    header.style.marginBottom = "30px";
+                    header.style.borderBottom = "2px solid #e5e7eb";
+                    header.style.paddingBottom = "20px";
+                    
+                    const title = document.createElement("h1");
+                    title.textContent = "Impact Measurement Tool";
+                    title.style.fontSize = "28px";
+                    title.style.fontWeight = "bold";
+                    title.style.color = "#1f2937";
+                    title.style.margin = "0 0 10px 0";
+                    
+                    const orgTitle = document.createElement("h2");
+                    orgTitle.textContent = orgName;
+                    orgTitle.style.fontSize = "20px";
+                    orgTitle.style.fontWeight = "600";
+                    orgTitle.style.color = "#4b5563";
+                    orgTitle.style.margin = "0";
+                    
+                    header.appendChild(title);
+                    header.appendChild(orgTitle);
+                    
+                    // Clone the visualization
+                    const vizClone = vizContainer.cloneNode(true);
+                    vizClone.style.position = "relative";
+                    vizClone.style.border = "none";
+                    
+                    exportContainer.appendChild(header);
+                    exportContainer.appendChild(vizClone);
+                    document.body.appendChild(exportContainer);
+
+                    // Configure html2canvas options for better quality
+                    const options = {
+                        backgroundColor: "#ffffff",
+                        scale: 2, // Higher resolution
+                        useCORS: true,
+                        allowTaint: true,
+                        width: exportContainer.scrollWidth,
+                        height: exportContainer.scrollHeight,
+                        scrollX: 0,
+                        scrollY: 0
+                    };
+
+                    html2canvas(exportContainer, options).then(canvas => {
+                        // Remove temporary container
+                        document.body.removeChild(exportContainer);
+                        
+                        // Create download link
+                        const link = document.createElement("a");
+                        link.download = `${orgName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_evaluation_framework.png`;
+                        link.href = canvas.toDataURL("image/png");
+                        
+                        // Trigger download
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        
+                        showMessage("Visualization exported successfully!", "success");
+                    }).catch(error => {
+                        // Remove temporary container on error
+                        if (document.body.contains(exportContainer)) {
+                            document.body.removeChild(exportContainer);
+                        }
+                        console.error("html2canvas error:", error);
+                        showMessage("Error exporting visualization: " + error.message);
+                    });
+                } else {
+                    showMessage("Export library not loaded. Please refresh the page and try again.");
+                }
+            } catch (error) {
+                console.error("Export error:", error);
+                showMessage("Error exporting visualization: " + error.message);
+            }
+        };
+
+        // Event Listeners
+        window.onload = () => {
+            const elements = {
+                orgName: document.getElementById("org-name"),
+                primaryActivity: document.getElementById("primary-activity-input"),
+                socialIssue: document.getElementById("social-issue-input"),
+                outcome: document.getElementById("outcome-trying-input"),
+                exportBtn: document.getElementById("export-btn"),
+                exportVizBtn: document.getElementById("export-viz-btn"),
+            };
+
+            // Initialize with empty state to test guided flow
+            state.logicModel = {
+                inputs: [""],
+                activities: [""],
+                outputs: [""],
+                outcomes: [""],
+                impact: [""],
+            };
+
+            renderLogicModel();
+            updateTheoryOfChange();
+            updateEvaluationFramework();
+            checkLogicModelCompletion();
+            initializeDragAndDrop();
+
+            // Populate industry dropdown
+            const industrySelect = document.getElementById("industrySelect");
+            Object.keys(industryData).forEach(industry => {
+                const option = document.createElement("option");
+                option.value = industry;
+                option.textContent = industry;
+                industrySelect.appendChild(option);
+            });
+
+            // Add industry selection event listener
+            industrySelect.addEventListener("change", (e) => {
+                updateExamples(e.target.value);
+            });
+
+            // Add event listeners with error handling
+            elements.exportBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                exportToExcel();
+            });
+            
+            elements.exportVizBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                exportVisualizationToPng();
+            });
+
+            // Add event listeners for the editable fields that generate elevator pitch (without Target Audience)
+            elements.orgName.addEventListener("input", updateTheoryOfChange);
+            elements.primaryActivity.addEventListener("input", updateTheoryOfChange);
+            elements.socialIssue.addEventListener("input", updateTheoryOfChange);
+            elements.outcome.addEventListener("input", updateTheoryOfChange);
+
+            // Add event listeners for logic model "add another" buttons
+            document.querySelectorAll(".add-item-btn").forEach((button) => {
+                button.addEventListener("click", (e) => {
+                    const key = e.target.dataset.type;
+                    addLogicModelItem(key);
+                });
+            });
+        };
+    </script>
+</html>
+
