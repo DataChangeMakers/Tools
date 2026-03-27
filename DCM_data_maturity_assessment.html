@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Maturity Assessment Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+        }
+        .card {
+            background-color: white;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .stage-card {
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+        .stage-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.1);
+        }
+        .selected-card {
+            border: 2px solid #3b82f6;
+            background-color: #eff6ff;
+            transform: scale(1.02);
+        }
+        .message-box {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            z-index: 100;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="message-box p-4 bg-red-500 text-white rounded-lg shadow-xl hidden" id="messageBox">
+        Please select an option to continue.
+    </div>
+
+    <!-- Main Container -->
+    <div class="container p-6 md:p-10 flex flex-col items-center">
+        <!-- Logo -->
+        <div class="mb-6 w-48 md:w-64">
+            <img src="https://static.wixstatic.com/media/2608ce_4ffd1217cfad49bb950c7e852ea7dbc0~mv2.png/v1/crop/x_0,y_84,w_1280,h_857/fill/w_133,h_89,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/FullLogo_Transparent.png" alt="Data ChangeMakers Logo" class="w-full h-auto">
+        </div>
+
+        <!-- Header -->
+        <div class="text-center mb-10">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Data Maturity Self-Assessment</h1>
+            <p class="text-lg text-gray-600">
+                A simple tool for nonprofits to understand their journey towards data maturity.
+            </p>
+        </div>
+
+        <!-- Assessment Section -->
+        <div id="assessment-container" class="w-full">
+            <!-- Welcome Screen -->
+            <div id="welcome-screen" class="card text-center transition-all duration-500 ease-in-out">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Welcome</h2>
+                <p class="text-gray-600 mb-6">
+                    This self-assessment will help your nonprofit understand its current stage of data maturity across seven key themes: Data, Tools, Leadership, Skills, Culture, Uses, and Analysis.
+                </p>
+                <p class="text-gray-600 mb-6">
+                    For each theme, select the stage that best describes your organization. Your results will provide a snapshot of your progress and highlight areas for improvement.
+                </p>
+                <button id="start-btn" class="bg-blue-600 text-white font-medium py-3 px-8 rounded-full shadow-lg hover:bg-blue-700 transition-colors duration-300">
+                    Start Assessment
+                </button>
+            </div>
+
+            <!-- Question Screen (Template) -->
+            <div id="question-screen" class="card hidden transition-all duration-500 ease-in-out">
+                <div class="flex items-center mb-6">
+                    <span id="progress-text" class="text-sm font-medium text-gray-500 mr-2">Question 1 of 7</span>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500"></div>
+                    </div>
+                </div>
+
+                <h2 id="theme-title" class="text-xl md:text-2xl font-semibold text-gray-800 mb-4"></h2>
+                <p id="theme-description" class="text-gray-600 mb-6"></p>
+
+                <div id="stage-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Stage cards will be dynamically inserted here -->
+                </div>
+
+                <div class="flex justify-between mt-8">
+                    <button id="prev-btn" class="bg-gray-300 text-gray-800 font-medium py-2 px-6 rounded-full shadow hover:bg-gray-400 transition-colors duration-300" disabled>
+                        Back
+                    </button>
+                    <button id="next-btn" class="bg-blue-600 text-white font-medium py-2 px-6 rounded-full shadow-lg hover:bg-blue-700 transition-colors duration-300">
+                        Next
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results Screen -->
+            <div id="results-screen" class="card hidden transition-all duration-500 ease-in-out">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Your Data Maturity Profile</h2>
+                <p class="text-gray-600 mb-6 text-center">
+                    Based on your responses, here is a snapshot of your organization's data maturity.
+                </p>
+
+                <div class="mb-8">
+                    <canvas id="results-chart"></canvas>
+                </div>
+
+                <div id="results-summary" class="space-y-4">
+                    <!-- Results will be dynamically inserted here -->
+                </div>
+
+                <button id="reset-btn" class="mt-8 bg-gray-300 text-gray-800 font-medium py-2 px-6 rounded-full shadow hover:bg-gray-400 transition-colors duration-300">
+                    Retake Assessment
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>
+                Learn more at <a href="https://www.datachangemakers.org/" target="_blank" class="text-blue-600 hover:underline">www.datachangemakers.org</a>
+            </p>
+            <p>
+                Contact us: <a href="mailto:info@datachangemakers.org" class="text-blue-600 hover:underline">info@datachangemakers.org</a>
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        const themes = [
+            {
+                name: "Data",
+                description: "This theme relates to the type, quality, and management of data within the organization.",
+                stages: {
+                    unaware: "Limited data (if any) collected. Collected manually, mostly on paper, only when needed for specific purpose. Data is meaningless or useful to the organisation.",
+                    emerging: "Data collection is both on paper and in digital forms. Data is regarded as meaningful for meeting external legal/funder requirements. It may be patchy and inconsistent.",
+                    learning: "Though errors remain, data collection methods are being improved. Data is reviewed to assess how it is relevant. The organisation knows how good or bad its data is.",
+                    developing: "Data requirements defined and consistently collected. Investment in staff training to ensure consistency. Focuses on collecting the right data for clearly specified purposes.",
+                    mastering: "Focuses on collecting the minimal amount of the most important and valuable data. Staff are trained in data collection. Data is high quality and reliable for multiple purposes."
+                }
+            },
+            {
+                name: "Tools",
+                description: "This theme assesses the technology and systems used to collect, store, and analyze data.",
+                stages: {
+                    unaware: "Data is disorganized and in a range of places. No formal responsibility for managing data. Data is collected manually.",
+                    emerging: "Data is stored in designated physical locations and digital formats. Some data is managed. Unstructured data is separated.",
+                    learning: "Digital data is mostly centrally stored on a secured, backed-up cloud system. Dedicated tools for basic data processing or descriptive statistical analysis.",
+                    developing: "Data is fully centrally stored in a secure digital system. People are held accountable for management, cleaning, and maintenance. Using advanced tools.",
+                    mastering: "Data is drawn from a minimal number of sub-databases and systems and is held in a single, accessible database. Leveraging advanced data and science tools."
+                }
+            },
+            {
+                name: "Leadership",
+                description: "This theme measures the commitment of leadership to a data-driven approach.",
+                stages: {
+                    unaware: "Not interested in data. No business plan. Don't use data for decision making. Don't invest in data.",
+                    emerging: "Some recognition of the importance of data but don't see the value of it. Little awareness of potential uses. Limited or very basic data knowledge among leadership.",
+                    learning: "Know data is important, curious to learn about its potential. Occasionally ask questions. There's a business plan with some defined goals. Learning through experience.",
+                    developing: "Becoming engaged, supportive, and active in harnessing data's value. Data and analytics is becoming a priority. Data is aligned with business plan.",
+                    mastering: "Value, plan, and prioritize data as a vital resource. Invest substantially. Fully understand how to use data to improve. Data drivers questions."
+                }
+            },
+            {
+                name: "Skills",
+                description: "This theme looks at the data literacy and capabilities of staff and volunteers.",
+                stages: {
+                    unaware: "No staff commitment. Little to no internal skills. No access to external knowledge or expertise.",
+                    emerging: "Responsibility for data collection is at administrator and finance officer level. Different staff collect data. No real understanding of needs for building data capabilities.",
+                    learning: "Beginning to understand needs. Dedicated person or team in charge of data. Adequate data analysis/reporting skills with some investment.",
+                    developing: "Understand different skill sets. Dedicated skills established with several people responsible for data. Individuals responsible for data have advanced skills.",
+                    mastering: "High levels of skill at senior, specialist, and administrative levels. Senior data strategist embedded at heart of leadership. Data skills are a core competency."
+                }
+            },
+            {
+                name: "Culture",
+                description: "This theme assesses the attitudes, values, and behaviors around data.",
+                stages: {
+                    unaware: "Nobody is interested in data. Data only accessible to a single person. Opinion, observation, and belief are used. Data is seen as a chore. Data is never shared.",
+                    emerging: "Data is seen as the responsibility of 'someone else'. Data is mostly sought out and used to support and evidence what the organization already believes.",
+                    learning: "Data is starting to be recognized as important at a more senior level. People are starting to talk about how they can work together. Access to data may be limited.",
+                    developing: "The whole organization is starting to use and share data. People from different levels regularly discuss data. Data and analysis are becoming more of a priority.",
+                    mastering: "Data is seen as a team effort and critical asset for every part. Everyone is committed to quality data. Staff are comfortable using data to ask difficult questions."
+                }
+            },
+            {
+                name: "Uses",
+                description: "This theme measures how the organization applies data to achieve its mission.",
+                stages: {
+                    unaware: "Records basic client information and activities. Little or no benefits or rewards. Collect and use data for external compliance.",
+                    emerging: "Collect more data than required by legal/funder contracts. Meet data collection and analysis to capture activities. Data is used for basic reporting.",
+                    learning: "Collect data to be able to understand and evidence the types of clients and problems. Starting to use data to understand different ways clients engage.",
+                    developing: "All client, activity, and outcomes data is routinely collected. Data is used to monitor performance. Data is used for proactive decision-making and targeting.",
+                    mastering: "Data is used extensively and in integrated, strategic ways. Sophisticated use of analysis delivers insights and predictions. Using data to predict outcomes and personalize services."
+                }
+            },
+            {
+                name: "Analysis",
+                description: "This theme is about the types and sophistication of data analysis conducted.",
+                stages: {
+                    unaware: "Analysis is non-existent beyond simple counts.",
+                    emerging: "Analyses starting to explore client characteristics and target audiences. Basic analysis, using counts and spreadsheets. People verbally report on data.",
+                    learning: "Whole-organization analyses are beginning to be performed. Focus is on analysis being meaningful and useful. Starting to identify what data should be routinely analyzed.",
+                    developing: "Embedding systems for analysis. More consistent and regular approach. Monitors what is happening in the present. Using a range of analytical techniques to find insights.",
+                    mastering: "Analysis extends beyond the organization. Advanced analysis supports decision-making on how to do things best. Data visualization delivers meaningful analysis."
+                }
+            }
+        ];
+
+        const stages = ["unaware", "emerging", "learning", "developing", "mastering"];
+        let currentThemeIndex = -1;
+        const userSelections = {};
+
+        const welcomeScreen = document.getElementById("welcome-screen");
+        const questionScreen = document.getElementById("question-screen");
+        const resultsScreen = document.getElementById("results-screen");
+        const startBtn = document.getElementById("start-btn");
+        const prevBtn = document.getElementById("prev-btn");
+        const nextBtn = document.getElementById("next-btn");
+        const resetBtn = document.getElementById("reset-btn");
+        const progressBar = document.getElementById("progress-bar");
+        const progressText = document.getElementById("progress-text");
+        const themeTitle = document.getElementById("theme-title");
+        const themeDescription = document.getElementById("theme-description");
+        const stageCardsContainer = document.getElementById("stage-cards");
+        const resultsSummary = document.getElementById("results-summary");
+        const messageBox = document.getElementById("messageBox");
+        const resultsChartCanvas = document.getElementById("results-chart");
+
+        const showMessage = (message, type = 'error') => {
+            messageBox.textContent = message;
+            messageBox.className = `message-box p-4 rounded-lg shadow-xl block ${type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`;
+            messageBox.style.transform = 'translateY(0)';
+            setTimeout(() => {
+                messageBox.style.transform = 'translateY(-100px)';
+                messageBox.classList.add('hidden');
+            }, 3000);
+        };
+
+        const showScreen = (screenId) => {
+            welcomeScreen.classList.add('hidden');
+            questionScreen.classList.add('hidden');
+            resultsScreen.classList.add('hidden');
+            document.getElementById(screenId).classList.remove('hidden');
+        };
+
+        const updateProgressBar = () => {
+            const progress = (currentThemeIndex / themes.length) * 100;
+            progressBar.style.width = `${progress}%`;
+            progressText.textContent = `Question ${currentThemeIndex + 1} of ${themes.length}`;
+        };
+
+        const renderQuestion = () => {
+            updateProgressBar();
+            if (currentThemeIndex >= themes.length) {
+                showResults();
+                return;
+            }
+
+            const currentTheme = themes[currentThemeIndex];
+            themeTitle.textContent = `Theme: ${currentTheme.name}`;
+            themeDescription.textContent = currentTheme.description;
+            stageCardsContainer.innerHTML = '';
+
+            stages.forEach(stage => {
+                const isSelected = userSelections[currentTheme.name] === stage;
+                const card = document.createElement('div');
+                card.className = `stage-card p-6 rounded-xl border-2 border-gray-200 text-center ${isSelected ? 'selected-card' : ''}`;
+                card.innerHTML = `
+                    <h3 class="font-bold text-gray-900 capitalize mb-2">${stage}</h3>
+                    <p class="text-sm text-gray-600">${currentTheme.stages[stage]}</p>
+                `;
+                card.addEventListener('click', () => {
+                    userSelections[currentTheme.name] = stage;
+                    document.querySelectorAll('.stage-card').forEach(c => c.classList.remove('selected-card'));
+                    card.classList.add('selected-card');
+                });
+                stageCardsContainer.appendChild(card);
+            });
+
+            prevBtn.disabled = currentThemeIndex === 0;
+            nextBtn.textContent = currentThemeIndex === themes.length - 1 ? "Submit" : "Next";
+        };
+
+        const renderResultsChart = (scores) => {
+            const ctx = resultsChartCanvas.getContext('2d');
+            const canvasWidth = resultsChartCanvas.offsetWidth;
+            const canvasHeight = 500;
+            resultsChartCanvas.width = canvasWidth;
+            resultsChartCanvas.height = canvasHeight;
+
+            const centerX = canvasWidth / 2;
+            const centerY = canvasHeight / 2;
+            const radius = Math.min(centerX, centerY) * 0.4;
+            
+            // Colors from the provided graphic
+            const themeColors = {
+                "Uses": "#fc6665",
+                "Data": "#f4e048",
+                "Analysis": "#4e4444",
+                "Leadership": "#c12c3f",
+                "Culture": "#87c541",
+                "Tools": "#527783",
+                "Skills": "#31456a"
+            };
+
+            const stageColors = ["#f3f4f6", "#e5e7eb", "#d1d5db", "#9ca3af", "#6b7280"];
+            const stageLabels = ["Unaware", "Emerging", "Learning", "Developing", "Mastering"];
+
+            // Radial chart (Donut)
+            let startAngle = 0;
+            const segmentAngle = Math.PI * 2 / themes.length;
+
+            themes.forEach(theme => {
+                const score = scores[theme.name];
+                const endAngle = startAngle + segmentAngle;
+                
+                // Draw a filled arc for the score
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius * (score / 5), startAngle, endAngle);
+                ctx.lineTo(centerX, centerY);
+                ctx.fillStyle = themeColors[theme.name];
+                ctx.fill();
+
+                // Draw a full segment to show the maximum possible score
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                ctx.lineTo(centerX, centerY);
+                ctx.strokeStyle = themeColors[theme.name];
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Draw the theme labels
+                const labelAngle = startAngle + segmentAngle / 2;
+                const labelX = centerX + Math.cos(labelAngle) * (radius + 25);
+                const labelY = centerY + Math.sin(labelAngle) * (radius + 25);
+                ctx.fillStyle = themeColors[theme.name];
+                ctx.font = "bold 12px Inter";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(theme.name.toUpperCase(), labelX, labelY);
+                
+                startAngle = endAngle;
+            });
+
+            // Horizontal line graph
+            const lineY = centerY + radius * 1.5;
+            const lineStartX = centerX - radius;
+            const lineEndX = centerX + radius;
+            const lineLength = lineEndX - lineStartX;
+            const numStages = stages.length;
+            const stageGap = lineLength / (numStages - 1);
+
+            // Draw the line and markers
+            ctx.beginPath();
+            ctx.moveTo(lineStartX, lineY);
+            ctx.lineTo(lineEndX, lineY);
+            ctx.strokeStyle = "#9ca3af";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw stage circles and labels
+            for (let i = 0; i < numStages; i++) {
+                const x = lineStartX + i * stageGap;
+                ctx.beginPath();
+                ctx.arc(x, lineY, 8, 0, Math.PI * 2);
+                ctx.fillStyle = stageColors[i];
+                ctx.fill();
+                ctx.strokeStyle = "#6b7280";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = "#6b7280";
+                ctx.font = "bold 12px Inter";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "top";
+                ctx.fillText(stageLabels[i], x, lineY + 15);
+            }
+
+            // Draw the overall score marker
+            let totalScore = 0;
+            themes.forEach(theme => totalScore += scores[theme.name]);
+            const averageScore = totalScore / themes.length;
+            const scoreX = lineStartX + ((averageScore - 1) / (numStages - 1)) * lineLength;
+
+            ctx.beginPath();
+            ctx.arc(scoreX, lineY, 12, 0, Math.PI * 2);
+            ctx.fillStyle = "#3b82f6";
+            ctx.fill();
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = "white";
+            ctx.font = "bold 12px Inter";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(averageScore.toFixed(1), scoreX, lineY);
+
+            // Add the overall score stage text
+            let overallStage = '';
+            if (averageScore <= 1.5) overallStage = 'Unaware';
+            else if (averageScore <= 2.5) overallStage = 'Emerging';
+            else if (averageScore <= 3.5) overallStage = 'Learning';
+            else if (averageScore <= 4.5) overallStage = 'Developing';
+            else overallStage = 'Mastering';
+
+            ctx.fillStyle = "#1f2937";
+            ctx.font = "bold 16px Inter";
+            ctx.textAlign = "center";
+            ctx.fillText(`Overall Stage: ${overallStage}`, centerX, lineY + 50);
+
+        };
+
+        const showResults = () => {
+            const scores = {};
+            let totalScore = 0;
+            resultsSummary.innerHTML = '';
+
+            themes.forEach(theme => {
+                const selectedStage = userSelections[theme.name];
+                const score = stages.indexOf(selectedStage) + 1;
+                scores[theme.name] = score;
+                totalScore += score;
+                const resultItem = document.createElement('div');
+                resultItem.className = 'bg-gray-100 p-4 rounded-lg';
+                resultItem.innerHTML = `
+                    <h4 class="font-semibold text-gray-800">${theme.name}: <span class="capitalize text-blue-600">${selectedStage}</span></h4>
+                    <p class="text-sm text-gray-600 mt-1">${theme.stages[selectedStage]}</p>
+                `;
+                resultsSummary.appendChild(resultItem);
+            });
+            
+            showScreen("results-screen");
+            renderResultsChart(scores);
+        };
+
+        startBtn.addEventListener('click', () => {
+            currentThemeIndex = 0;
+            showScreen("question-screen");
+            renderQuestion();
+        });
+
+        nextBtn.addEventListener('click', () => {
+            const currentTheme = themes[currentThemeIndex];
+            if (!userSelections[currentTheme.name]) {
+                showMessage("Please select a stage before continuing.");
+                return;
+            }
+            currentThemeIndex++;
+            renderQuestion();
+        });
+
+        prevBtn.addEventListener('click', () => {
+            currentThemeIndex--;
+            renderQuestion();
+        });
+
+        resetBtn.addEventListener('click', () => {
+            currentThemeIndex = -1;
+            Object.keys(userSelections).forEach(key => delete userSelections[key]);
+            showScreen("welcome-screen");
+        });
+
+        window.onload = () => {
+            // Initial render
+            showScreen("welcome-screen");
+        };
+    </script>
+</body>
+</html>
